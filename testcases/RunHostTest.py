@@ -30,6 +30,10 @@ on the host.
 import unittest
 import os
 
+from common.OpTestSSHConnection import OpTestSSHConnection, OpTestCommandResult
+from common.OpTestCommandExecutor import OpTestCommandExecutor
+from common.Exceptions import SSHCommandFailed, SSHSessionDisconnected
+
 import OpTestConfiguration
 from common.OpTestSystem import OpSystemState
 from common.OpTestSOL import OpSOLMonitorThread
@@ -56,13 +60,16 @@ class RunHostTest(unittest.TestCase):
         con = self.cv_SYSTEM.cv_HOST.get_ssh_connection()
         try:
             if self.host_cmd:
-                con.run_command(self.host_cmd, timeout=self.host_cmd_timeout)
+                # Use console-based execution (not direct SSH) to maintain session state
+                con.run_command(self.host_cmd, timeout=self.host_cmd_timeout, use_direct_ssh=False)
             if self.host_cmd_file:
                 if not os.path.isfile(self.host_cmd_file):
                     self.fail("Provide valid host cmd file path")
                 fd = open(self.host_cmd_file, "r")
                 for line in fd.readlines():
                     line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue  # Skip empty lines and comments
                     if "reboot" in line:
                         self.console_thread.console_terminate()
                         self.cv_SYSTEM.goto_state(OpSystemState.OFF)
@@ -71,7 +78,8 @@ class RunHostTest(unittest.TestCase):
                         self.console_thread = OpSOLMonitorThread(1, "console")
                         self.console_thread.start()
                         continue
-                    con.run_command(line, timeout=self.host_cmd_timeout)
+                    # Use console-based execution (not direct SSH) to maintain session state
+                    con.run_command(line, timeout=self.host_cmd_timeout, use_direct_ssh=False)
         finally:
             if self.host_cmd_resultpath:
                 self.cv_SYSTEM.cv_HOST.copy_files_from_host(self.resultpath,
